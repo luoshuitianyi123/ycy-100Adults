@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ycy-100Adults</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", sans-serif; background: #f4f5f7; padding: 18px; max-width: 880px; margin: 0 auto; color: #222; }
+h1 { font-size: 21px; margin-bottom: 16px; }
+.card { background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card h2 { font-size: 15px; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+.row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.pill { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
+.ok { background: #d4edda; color: #155724; }
+.warn { background: #fff3cd; color: #856404; }
+.err { background: #f8d7da; color: #721c24; }
+button { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.btn-red { background: #e94560; color: #fff; }
+.btn-blue { background: #0f3460; color: #fff; }
+.btn-green { background: #28a745; color: #fff; }
+.btn-gray { background: #e2e4e8; color: #333; }
+input, select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+input[type=text] { width: 100%; max-width: 420px; }
+input[type=number] { width: 90px; }
+label { font-size: 13px; color: #666; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.stat { font-size: 14px; margin-right: 16px; }
+.stat b { font-size: 16px; }
+#ble-log { width: 100%; font-size: 12px; border: 1px solid #eee; border-radius: 8px; padding: 8px; height: 90px; overflow-y: auto; background: #fafafa; }
+input[type=range] { width: 160px; }
+.note { font-size: 12px; color: #999; }
+</style>
+</head>
+<body>
+<h1>ycy-100Adults <span id="app-version" class="note">v—</span></h1>
+
+<div class="card">
+  <h2>安全控制</h2>
+  <div class="row">
+    <span>急停:</span><span id="s-panic" class="pill warn">—</span>
+    <span>武装:</span><span id="s-armed" class="pill warn">—</span>
+    <span>模式:</span><span id="s-dry" class="pill warn">—</span>
+    <span>输出:</span><span id="s-gate" class="pill warn">—</span>
+  </div>
+  <div class="row">
+    <button class="btn-red" onclick="doPanic()">紧急停止</button>
+    <button class="btn-green" onclick="doArm()">武装（实机）</button>
+    <button class="btn-gray" onclick="doDisarm()">解除武装</button>
+    <button class="btn-gray" onclick="doReset()">重置急停</button>
+    <label>强度上限</label>
+    <input id="user-max" type="number" min="1" max="20" value="20" onchange="saveMax()">
+    <button class="btn-blue" onclick="saveMax()">保存上限</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>设备连接（浏览器蓝牙直连）</h2>
+  <div class="row">
+    <span>蓝牙:</span><span id="s-ble" class="pill warn">—</span>
+    <span>电量:</span><span id="dev-batt">—</span>
+    <span>设备信息:</span><span id="dev-info">—</span>
+  </div>
+  <div class="row">
+    <button class="btn-blue" onclick="webBLEConnect()">连接蓝牙设备</button>
+    <button class="btn-gray" onclick="webBLEDisconnect()">断开</button>
+  </div>
+  <div class="row note">需 Chrome/Edge 在本机 (127.0.0.1) 打开；扫描 Service FF40 的 YSKJ 设备。</div>
+  <div id="ble-log"></div>
+</div>
+
+<div class="card">
+  <h2>通道来源（A/B/C 各跟一路信号）</h2>
+  <div class="row">
+    <label>A</label>
+    <select id="ch-A">
+      <option value="bpm">速度 BPM</option>
+      <option value="speed">速度段（6 档）</option>
+      <option value="grip">强度 grip（5 档）</option>
+      <option value="level">档位 level（1–9）</option>
+      <option value="off">关闭</option>
+    </select>
+    <label>B</label>
+    <select id="ch-B">
+      <option value="bpm">速度 BPM</option>
+      <option value="speed">速度段（6 档）</option>
+      <option value="grip">强度 grip（5 档）</option>
+      <option value="level">档位 level（1–9）</option>
+      <option value="off">关闭</option>
+    </select>
+    <label>C</label>
+    <select id="ch-C">
+      <option value="bpm">速度 BPM</option>
+      <option value="speed">速度段（6 档）</option>
+      <option value="grip">强度 grip（5 档）</option>
+      <option value="level">档位 level（1–9）</option>
+      <option value="off">关闭</option>
+    </select>
+    <button class="btn-blue" onclick="saveChannels()">保存来源</button>
+  </div>
+  <div class="row note">三通道可分别绑定不同信号；选「关闭」则该通道不输出。默认 A=速度段 speed、B=强度 grip、C=档位 level。信号来自浏览器桥接脚本。</div>
+  <div class="row">
+    <label>A 偏移</label><input id="off-A" type="number" min="-10" max="10" value="0">
+    <label>B 偏移</label><input id="off-B" type="number" min="-10" max="10" value="0">
+    <label>C 偏移</label><input id="off-C" type="number" min="-10" max="10" value="0">
+    <button class="btn-blue" onclick="saveOffsets()">保存偏移</button>
+  </div>
+  <div class="row note">偏移在映射强度上整体加减（-10 偏弱 ~ +10 偏强）；停止 / 无数据时不被抬高。</div>
+  <div class="row">
+    <span class="stat">原始 BPM <b id="raw-bpm">—</b></span>
+    <span class="stat">速度档 <b id="raw-speed">—</b></span>
+    <span class="stat">原始强度 <b id="raw-grip">—</b></span>
+    <span class="stat">原始档位 <b id="raw-level">—</b></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>当前输出</h2>
+  <div class="row">
+    <span class="stat">BPM <b id="cur-bpm">—</b></span>
+    <span class="stat">档位 <b id="cur-level">—</b></span>
+    <span class="stat">来源 <b id="cur-source">—</b></span>
+    <span class="stat">指令 <b id="cur-cmd">—</b></span>
+  </div>
+  <div class="row">
+    <span class="stat">A <b id="cur-a">0</b></span>
+    <span class="stat">B <b id="cur-b">0</b></span>
+    <span class="stat">C <b id="cur-c">0</b></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>手动控制（三马达强度 0–20）</h2>
+  <div class="row">
+    <label>A</label><input id="man-a" type="range" min="0" max="20" value="0" oninput="manInput('a',this)">
+    <span id="man-a-v">0</span>
+    <label>B</label><input id="man-b" type="range" min="0" max="20" value="0" oninput="manInput('b',this)">
+    <span id="man-b-v">0</span>
+    <label>C</label><input id="man-c" type="range" min="0" max="20" value="0" oninput="manInput('c',this)">
+    <span id="man-c-v">0</span>
+    <button class="btn-blue" onclick="setMotors()">下发</button>
+  </div>
+</div>
+
+<div class="card" style="border-left:4px solid #e94560;">
+  <h2>使用注意</h2>
+  <div style="font-size:13px;color:#555;line-height:1.9;">
+    <p>1. 后端仅监听本机回环地址（127.0.0.1），不向外网暴露；不要把监听端口转发到公网。</p>
+    <p>2. 默认预览模式（dry_run），需手动武装后才会输出到硬件；不用时及时解除武装或断开设备。</p>
+    <p>3. 请从最低档开始，按需设置强度上限，避免长时间连续高输出；出现异常立即按下紧急停止。</p>
+    <p>4. 本工具为本地设备控制演示框架，使用者自行承担使用方式与后果。</p>
+  </div>
+</div>
+
+<script>
+// ===== 协议常量（YSKJ V1.1 三马达） =====
+const SVC_UUID = '0000ff40-0000-1000-8000-00805f9b34fb';
+const WRITE_UUID = '0000ff41-0000-1000-8000-00805f9b34fb';
+const NOTIFY_UUID = '0000ff42-0000-1000-8000-00805f9b34fb';
+const HEADER = 0x35, CMD_INFO = 0x10, CMD_REALTIME = 0x12, CMD_BATTERY = 0x13;
+
+let bleDevice = null, writeChar = null, notifyChar = null;
+let cur = { A: 0, B: 0, C: 0 };
+let lastSent = { A: -1, B: -1, C: -1 };
+let wsDev = null, wsRetry = null, writeQueue = Promise.resolve();
+
+function bleLog(msg) {
+  const box = document.getElementById('ble-log');
+  const ts = new Date().toLocaleTimeString();
+  box.textContent = `[${ts}] ${msg}\n` + box.textContent;
+}
+function checksum(bytes) { return bytes.reduce((s, b) => s + b, 0) & 0xFF; }
+function toHex(u8) { return Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join(' '); }
+function clampLvl(v) { return Math.max(0, Math.min(20, v | 0)); }
+
+function buildRealtimeFrame() {
+  const body = [HEADER, CMD_REALTIME, clampLvl(cur.A), clampLvl(cur.B), clampLvl(cur.C)];
+  body.push(checksum(body));
+  return new Uint8Array(body);
+}
+function buildInfoQuery() {
+  const body = [HEADER, CMD_INFO];
+  body.push(checksum(body));
+  return new Uint8Array(body);
+}
+
+function bleWrite(frame) {
+  if (!writeChar) { bleLog('⚠️ 写特征未就绪，帧未下发'); return Promise.resolve(); }
+  const job = writeQueue.then(async () => {
+    if (!writeChar) return;
+    const p = writeChar.properties || {};
+    if (p.writeWithoutResponse) await writeChar.writeValueWithoutResponse(frame);
+    else await writeChar.writeValueWithResponse(frame);
+  });
+  writeQueue = job.catch(() => {});
+  return job.catch(e => { bleLog(`❌ 写入失败 [${toHex(frame)}]: ${e.message}`); throw e; });
+}
+
+async function sendRealtime(force = false) {
+  if (!writeChar) return;
+  const l = lastSent;
+  if (!force && cur.A === l.A && cur.B === l.B && cur.C === l.C) return;
+  try {
+    await bleWrite(buildRealtimeFrame());
+    lastSent = { ...cur };
+  } catch (e) { /* 已记录 */ }
+}
+
+function parseNotify(data) {
+  const u8 = (data instanceof DataView)
+    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    : new Uint8Array(data);
+  const bytes = Array.from(u8);
+  if (!bytes.length) return;
+  const hex = toHex(bytes);
+  if (bytes[0] !== HEADER) { bleLog(`⚠️ 包头非 0x35: ${hex}`); return; }
+  const cmd = bytes[1];
+  if (cmd === CMD_INFO && bytes.length >= 10) {
+    const info = { model_id: bytes[2], version: bytes[3], modes: { A: bytes[4], B: bytes[5], C: bytes[6] } };
+    document.getElementById('dev-info').textContent = `型号 ${info.model_id} · 模式 A${info.modes.A}/B${info.modes.B}/C${info.modes.C}`;
+    pushDeviceStatus({ type: 'device_status', device_info: info });
+    bleLog(`📥 设备信息 ${hex}`);
+  } else if (cmd === CMD_BATTERY && bytes.length >= 5) {
+    const batt = Math.max(0, Math.min(100, bytes[3]));
+    document.getElementById('dev-batt').textContent = batt + '%';
+    pushDeviceStatus({ type: 'device_status', battery: batt });
+    bleLog(`📥 电量 ${batt}%`);
+  } else {
+    bleLog(`📥 回传 [${bytes.length}] ${hex}`);
+  }
+}
+
+async function webBLEConnect() {
+  if (!navigator.bluetooth) { bleLog('当前浏览器不支持 Web Bluetooth，请用 Chrome/Edge 本机打开'); return; }
+  try {
+    bleLog('正在扫描 YSKJ 设备…');
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SVC_UUID] }],
+      optionalServices: [SVC_UUID],
+    });
+    bleLog(`找到 ${bleDevice.name || '未命名'}，连接中…`);
+    const server = await bleDevice.gatt.connect();
+    const svc = await server.getPrimaryService(SVC_UUID);
+    try { writeChar = await svc.getCharacteristic(WRITE_UUID); } catch (e) { writeChar = null; }
+    try { notifyChar = await svc.getCharacteristic(NOTIFY_UUID); } catch (e) { notifyChar = null; }
+    const chars = await svc.getCharacteristics();
+    for (const ch of chars) {
+      const p = ch.properties || {};
+      if (!writeChar && (p.write || p.writeWithoutResponse)) writeChar = ch;
+      if (!notifyChar && (p.notify || p.indicate)) notifyChar = ch;
+    }
+    if (!writeChar) throw new Error('未找到可写特征 FF41');
+    bleLog(`✅ 写特征 ${writeChar.uuid.slice(4, 8)}`);
+    if (notifyChar) {
+      await notifyChar.startNotifications();
+      notifyChar.addEventListener('characteristicvaluechanged', e => parseNotify(e.target.value));
+      bleLog(`✅ notify ${notifyChar.uuid.slice(4, 8)} 订阅成功`);
+    } else {
+      bleLog('⚠️ 未找到 notify 特征，状态不回传');
+    }
+    bleDevice.addEventListener('gattserverdisconnected', () => {
+      bleLog('蓝牙已断开'); writeChar = null; notifyChar = null;
+      setPill('s-ble', '未连接', 'err');
+    });
+    setPill('s-ble', '已连接', 'ok');
+    await bleWrite(buildInfoQuery());
+    await sendRealtime(true);
+  } catch (e) {
+    bleLog(`❌ 连接失败: ${e.message}`);
+    setPill('s-ble', '失败', 'err');
+  }
+}
+
+function webBLEDisconnect() {
+  if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+  bleDevice = null; writeChar = null; notifyChar = null;
+  setPill('s-ble', '未连接', 'warn');
+  bleLog('已断开');
+}
+
+// ===== 设备命令 WS（后端 → 浏览器） =====
+function connectDeviceWS() {
+  if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
+  if (wsDev) { wsDev.onclose = null; wsDev.close(); wsDev = null; }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsDev = new WebSocket(`${proto}://${location.host}/ws/device`);
+  wsDev.onopen = () => bleLog('设备 WS 已连接');
+  wsDev.onmessage = async (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type !== 'device_command') return;
+      if (msg.cmd === 'stop') {
+        cur = { A: 0, B: 0, C: 0 }; lastSent = { A: -1, B: -1, C: -1 };
+        await sendRealtime(true); bleLog('收到停止命令，已归零');
+      } else if (msg.cmd === 'realtime') {
+        const m = msg.motors || {};
+        cur = { A: clampLvl(m.A ?? 0), B: clampLvl(m.B ?? 0), C: clampLvl(m.C ?? 0) };
+        bleLog(`📥 强度 A=${cur.A} B=${cur.B} C=${cur.C} 帧=${toHex(buildRealtimeFrame())}`);
+        await sendRealtime();
+      }
+    } catch (e) { bleLog(`WS 解析失败: ${e.message}`); }
+  };
+  wsDev.onclose = () => { bleLog('设备 WS 断开，2 秒后重连…'); wsRetry = setTimeout(connectDeviceWS, 2000); };
+}
+
+function pushDeviceStatus(data) {
+  if (wsDev && wsDev.readyState === WebSocket.OPEN) wsDev.send(JSON.stringify(data));
+}
+
+// ===== HTTP 操作 =====
+async function api(path, body) {
+  const opt = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  return r.json().catch(() => ({}));
+}
+async function doPanic() { await api('/api/control/panic'); refresh(); }
+async function doArm() {
+  const r = await api('/api/control/arm');
+  if (!r.ok) alert('武装失败：处于急停锁存状态，请先点「重置急停」再武装');
+  refresh();
+}
+async function doDisarm() { await api('/api/control/disarm'); refresh(); }
+async function doReset() { await api('/api/control/reset'); refresh(); }
+// 未保存改动标记：被改过但还没点保存的控件，轮询回填不得覆盖
+const dirty = new Set();
+function markDirty(id) { dirty.add(id); }
+function bindDirty(id, evt) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener(evt, () => markDirty(id));
+}
+function bindSettingControls() {
+  bindDirty('user-max', 'input');
+  for (const ch of ['A', 'B', 'C']) {
+    bindDirty('ch-' + ch, 'change');
+    bindDirty('off-' + ch, 'input');
+    bindDirty('off-' + ch, 'change');
+  }
+}
+
+async function saveMax() {
+  const v = parseInt(document.getElementById('user-max').value, 10) || 20;
+  const r = await api('/api/control/max', { user_max: v });
+  if (r.ok !== false) dirty.delete('user-max');
+  refresh();
+}
+async function saveChannels() {
+  const channels = {};
+  for (const ch of ['A', 'B', 'C']) channels[ch] = document.getElementById('ch-' + ch).value;
+  const r = await api('/api/control/channels', { channels });
+  if (r.ok !== false) ['A', 'B', 'C'].forEach(ch => dirty.delete('ch-' + ch));
+  refresh();
+}
+async function saveOffsets() {
+  const offsets = {};
+  for (const ch of ['A', 'B', 'C']) {
+    const v = parseInt(document.getElementById('off-' + ch).value, 10);
+    offsets[ch] = Number.isNaN(v) ? 0 : v;
+  }
+  const r = await api('/api/control/offsets', { offsets });
+  if (r.ok !== false) ['A', 'B', 'C'].forEach(ch => dirty.delete('off-' + ch));
+  refresh();
+}
+let motorTimer = null;
+function manInput(ch, el) {
+  document.getElementById('man-' + ch + '-v').textContent = el.value;
+  clearTimeout(motorTimer);
+  motorTimer = setTimeout(setMotors, 120);
+}
+async function setMotors() {
+  const a = +document.getElementById('man-a').value;
+  const b = +document.getElementById('man-b').value;
+  const c = +document.getElementById('man-c').value;
+  await api('/api/control/motors', { a, b, c }); refresh();
+}
+function setPill(id, text, cls) {
+  const el = document.getElementById(id);
+  el.textContent = text; el.className = 'pill ' + cls;
+}
+
+async function refresh() {
+  const d = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+  if (d.version) document.getElementById('app-version').textContent = 'v' + d.version;
+  setPill('s-panic', d.panic ? '已触发!' : '正常', d.panic ? 'err' : 'ok');
+  setPill('s-armed', d.armed ? '已武装' : '未武装', d.armed ? 'ok' : 'warn');
+  setPill('s-dry', d.dry_run ? '预览模式' : '实机模式', d.dry_run ? 'warn' : 'ok');
+  setPill('s-gate', d.can_output ? '可输出' : d.gate_reason || '受限', d.can_output ? 'ok' : 'warn');
+  const maxEl = document.getElementById('user-max');
+  if (!dirty.has('user-max') && document.activeElement !== maxEl) maxEl.value = d.user_max ?? 20;
+  const src = d.channel_source || {};
+  for (const ch of ['A', 'B', 'C']) {
+    const el = document.getElementById('ch-' + ch);
+    if (el && !dirty.has(el.id) && document.activeElement !== el) el.value = src[ch] || 'bpm';
+  }
+  const off = d.channel_offset || {};
+  for (const ch of ['A', 'B', 'C']) {
+    const el = document.getElementById('off-' + ch);
+    if (el && !dirty.has(el.id) && document.activeElement !== el) el.value = off[ch] ?? 0;
+  }
+  const raw = d.raw || {};
+  document.getElementById('raw-bpm').textContent = raw.bpm ?? '—';
+  document.getElementById('raw-speed').textContent = raw.speed ?? '—';
+  document.getElementById('raw-grip').textContent = raw.grip ?? '—';
+  document.getElementById('raw-level').textContent = raw.level ?? '—';
+  document.getElementById('cur-bpm').textContent = d.bpm ?? '—';
+  document.getElementById('cur-level').textContent = d.level_btn ?? '—';
+  document.getElementById('cur-source').textContent = d.source ?? '—';
+  document.getElementById('cur-cmd').textContent = d.last_cmd ?? '—';
+  document.getElementById('cur-a').textContent = d.motors?.A ?? 0;
+  document.getElementById('cur-b').textContent = d.motors?.B ?? 0;
+  document.getElementById('cur-c').textContent = d.motors?.C ?? 0;
+}
+
+bindSettingControls();
+connectDeviceWS();
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# PyInstaller 中间目录（dist 产物按约定入库）
+build/
+
+# 本地临时 / 测试脚本（不误伤 __init__.py）
+_test*.py
+_tmp*.py
